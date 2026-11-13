@@ -12,7 +12,9 @@
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "prepare:hosting": "node scripts/prepare-hosting.mjs",
+    "postbuild": "npm run prepare:hosting"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
@@ -20,5 +22,8 @@
     "typescript": "7.0.2",
     "vite": "8.3.8",
     "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }

@@ -10,6 +10,9 @@ It does not transcribe audio or certify that a sentence was spoken. It gives you
 
 ![GhostWords review workspace](docs/assets/screenshot.png)
 
+
+**[Open the live app ↗](https://ghost-words.vercel.app/)** · [Deployment guide](docs/DEPLOYMENT.md)
+
 ## Why it exists
 
 A fluent transcript can include a sentence over silence, a repetition loop, or timestamps from a different recording. Those mistakes are easy to miss when you only read the text. GhostWords brings the audio back into the decision.
