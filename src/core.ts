@@ -24,8 +24,8 @@ export function validateCues(value: unknown): Cue[] {
 }
 export function parseTranscript(source: string, extension = 'srt'): Cue[] {
   if (source.length > 2_000_000) throw new Error('Transcript exceeds the 2 MB text limit.');
-  if (extension.toLowerCase() === 'json' || source.trim().startsWith('[') || source.trim().startsWith('{')) return validateCues(JSON.parse(source));
   const text = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  if (extension.toLowerCase() === 'json' || text.trim().startsWith('[') || text.trim().startsWith('{')) return validateCues(JSON.parse(text));
   const blocks = text.split(/\n\s*\n/);
   const cues: Cue[] = [];
   for (const block of blocks) {
@@ -106,7 +106,14 @@ export function formatTime(seconds: number, separator = ','): string {
   return `${String(Math.floor(ms / 3600000)).padStart(2, '0')}:${String(Math.floor(ms / 60000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}${separator}${String(ms % 1000).padStart(3, '0')}`;
 }
 export function exportSrt(cues: Cue[], decisions: Record<string, Decision> = {}): string {
-  return cues.filter(cue => decisions[cue.id] !== 'remove').map((cue, index) => `${index + 1}\n${formatTime(cue.start)} --> ${formatTime(cue.end)}\n${cue.text}\n`).join('\n');
+  return cues.filter(cue => decisions[cue.id] !== 'remove').map((cue, index) => {
+    const startMs = Math.round(cue.start * 1000);
+    const endMs = Math.max(startMs + 1, Math.round(cue.end * 1000));
+    // Blank lines delimit SRT cues. Keep every word, while preventing embedded
+    // blank lines and sub-millisecond timings from producing an invalid export.
+    const text = cue.text.replace(/\r\n?/g, '\n').replace(/\n\s*\n/g, '\n').trim();
+    return `${index + 1}\n${formatTime(startMs / 1000)} --> ${formatTime(endMs / 1000)}\n${text}\n`;
+  }).join('\n');
 }
 export function demoSignal(): AudioSignal {
   const sampleRate = 16000;

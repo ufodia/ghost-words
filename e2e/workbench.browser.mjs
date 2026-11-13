@@ -26,3 +26,15 @@ test('local workbench: analysis, evidence, export and responsive layout',async({
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1)).toBe(false);
   expect(errors).toEqual([]);
 });
+
+for(const reset of ['clear','demo'])test(`a pending transcript cannot undo ${reset}`,async({page})=>{
+  await page.goto('/');
+  await page.evaluate(()=>{const read=File.prototype.text;File.prototype.text=function(){return this.name==='slow.srt'?new Promise(resolve=>{window.finishTranscript=()=>resolve('1\n00:00:00,000 --> 00:00:01,000\nStale transcript');}):read.call(this);};});
+  await page.locator('#transcript-file').setInputFiles({name:'slow.srt',mimeType:'application/x-subrip',buffer:Buffer.from('slow')});
+  await expect.poll(()=>page.evaluate(()=>typeof window.finishTranscript)).toBe('function');
+  await page.locator(`#${reset}`).click();
+  await page.evaluate(()=>window.finishTranscript());
+  await expect(page.locator('.cue-row')).toHaveCount(reset==='clear'?0:5);
+  await expect(page.locator('#session-name')).toHaveText(reset==='clear'?'Empty desk':'Synthetic demo session');
+  await expect(page.locator('#message')).toHaveText(reset==='clear'?'Workspace cleared from memory.':'Demo loaded. Select the quiet-audio flag, then listen.');
+});

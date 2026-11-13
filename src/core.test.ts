@@ -14,6 +14,19 @@ describe('timestamped transcript formats', () => {
   it('validates JSON cues and regenerates identities', () => {
     expect(parseTranscript('{"cues":[{"id":"<script>","start":0,"end":1,"text":"literal <script>"}]}', 'json')[0].id).toBe('cue-1');
   });
+  it('accepts a UTF-8 BOM in JSON transcript files', () => {
+    expect(parseTranscript('\uFEFF[{"start":0,"end":1,"text":"BOM transcript"}]', 'json')[0].text).toBe('BOM transcript');
+  });
+  it('keeps SRT exports parseable when JSON text includes blank lines', () => {
+    const cues = validateCues([{ start: 0, end: 1, text: 'First line.\n \nSecond line.\r\n\r\nThird line.' }]);
+    expect(parseTranscript(exportSrt(cues))[0].text).toBe('First line.\nSecond line.\nThird line.');
+  });
+  it('preserves positive cue durations at SRT millisecond precision', () => {
+    const cues = validateCues([{ start: 0.0008, end: 0.0012, text: 'Very short cue.' }]);
+    const [roundTrip] = parseTranscript(exportSrt(cues));
+    expect(roundTrip.start).toBe(0.001);
+    expect(roundTrip.end).toBe(0.002);
+  });
   it('rejects reversed, negative and nonnumeric timings', () => {
     for (const start of [-1, NaN, '1']) expect(() => validateCues([{ start, end: 2, text: 'a' }])).toThrow();
     expect(() => validateCues([{ start: 3, end: 2, text: 'a' }])).toThrow();

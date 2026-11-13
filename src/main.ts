@@ -25,6 +25,7 @@ let audioName = 'synthetic-demo.wav';
 let threshold = -42;
 let loadingAudio = false;
 let audioGeneration = 0;
+let transcriptGeneration = 0;
 function message(text: string, error = false) { const el = byId('message'); el.textContent = text; el.classList.toggle('error', error); }
 function download(name: string, content: string, type: string) { const url = URL.createObjectURL(new Blob([content], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 function setAudio(blob: Blob, nextSignal: AudioSignal, name: string) {
@@ -38,7 +39,7 @@ function setAudio(blob: Blob, nextSignal: AudioSignal, name: string) {
   drawWave();
 }
 function loadDemo() {
-  audioGeneration++; cues = demoCues.map(c => ({ ...c })); decisions = {}; selected = 'cue-2';
+  audioGeneration++; transcriptGeneration++; cues = demoCues.map(c => ({ ...c })); decisions = {}; selected = 'cue-2';
   const demo = demoSignal(); setAudio(new Blob([wavBytes(demo)], { type: 'audio/wav' }), demo, 'synthetic-demo.wav');
   byId('session-name').textContent = 'Synthetic demo session'; byId('demo-note').hidden = false; byId<HTMLInputElement>('audio-file').value = ''; byId<HTMLInputElement>('transcript-file').value = '';
   refresh(); message('Demo loaded. Select the quiet-audio flag, then listen.');
@@ -64,7 +65,7 @@ function renderCues() {
     const cueFindings = findings.filter(f => f.cueId === cue.id);
     const badge = document.createElement('span'); badge.className = `cue-badge ${cueFindings.length ? 'flagged' : ''}`; badge.textContent = decisions[cue.id] === 'remove' ? 'REMOVED' : decisions[cue.id] === 'keep' ? 'REVIEWED' : cueFindings.length ? 'CHECK THIS' : 'NO SIGNAL FLAG';
     meta.append(play, time, badge); row.append(meta);
-    const text = document.createElement('textarea'); text.value = cue.text; text.rows = cue.text.length > 85 ? 3 : 2; text.setAttribute('aria-label', `Edit segment ${cue.id.replace('cue-', '')}`);
+    const text = document.createElement('textarea'); text.value = cue.text; text.maxLength = 20000; text.rows = cue.text.length > 85 ? 3 : 2; text.setAttribute('aria-label', `Edit segment ${cue.id.replace('cue-', '')}`);
     text.onchange = () => { if (!text.value.trim()) { message('Use Remove line to exclude an empty segment.', true); text.value = cue.text; return; } cue.text = text.value.trim(); decisions[cue.id] = 'pending'; refresh(); message('Text updated. Review flags have been recalculated.'); };
     row.append(text);
     const actions = document.createElement('div'); actions.className = 'cue-actions';
@@ -104,9 +105,9 @@ function drawWave() {
   ctx.fillStyle = '#d99d7230'; for (const f of findings.filter(f => f.kind === 'silence')) { const cue = cues.find(c => c.id === f.cueId)!; ctx.fillRect(cue.start / duration * width, 0, (cue.end - cue.start) / duration * width, height); }
 }
 byId('demo').onclick = loadDemo;
-byId('clear').onclick = () => { audioGeneration++; cues = []; decisions = {}; signal = null; findings = []; audio.pause(); audio.removeAttribute('src'); audio.load(); if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null; byId('session-name').textContent = 'Empty desk'; byId('audio-duration').textContent = 'No audio loaded'; byId('file-info').textContent = 'Load audio and a matching transcript'; byId('demo-note').hidden = true; refresh(); drawWave(); message('Workspace cleared from memory.'); };
+byId('clear').onclick = () => { audioGeneration++; transcriptGeneration++; cues = []; decisions = {}; signal = null; findings = []; audioName = ''; stopAt = null; audio.pause(); audio.removeAttribute('src'); audio.load(); if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null; byId('session-name').textContent = 'Empty desk'; byId('audio-duration').textContent = 'No audio loaded'; byId('file-info').textContent = 'Load audio and a matching transcript'; byId('demo-note').hidden = true; refresh(); drawWave(); message('Workspace cleared from memory.'); };
 byId<HTMLInputElement>('threshold').oninput = event => { threshold = +(event.target as HTMLInputElement).value; byId('threshold-value').textContent = `${threshold} dBFS`; refresh(); drawWave(); };
-byId<HTMLInputElement>('transcript-file').onchange = async event => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return; try { if (file.size > 2_000_000) throw new Error('Transcript exceeds the 2 MB limit.'); const parsed = parseTranscript(await file.text(), file.name.split('.').pop()); cues = parsed; decisions = {}; selected = parsed[0].id; byId('session-name').textContent = file.name; byId('demo-note').hidden = true; refresh(); drawWave(); message(`Loaded ${parsed.length} transcript segments.`); } catch (error) { message((error as Error).message, true); } finally { (event.target as HTMLInputElement).value = ''; } };
+byId<HTMLInputElement>('transcript-file').onchange = async event => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return; const generation = ++transcriptGeneration; try { if (file.size > 2_000_000) throw new Error('Transcript exceeds the 2 MB limit.'); const source = await file.text(); if (generation !== transcriptGeneration) return; const parsed = parseTranscript(source, file.name.split('.').pop()); cues = parsed; decisions = {}; selected = parsed[0].id; byId('session-name').textContent = file.name; byId('demo-note').hidden = true; refresh(); drawWave(); message(`Loaded ${parsed.length} transcript segments.`); } catch (error) { if (generation === transcriptGeneration) message((error as Error).message, true); } finally { if (generation === transcriptGeneration) (event.target as HTMLInputElement).value = ''; } };
 byId<HTMLInputElement>('audio-file').onchange = async event => {
   const file = (event.target as HTMLInputElement).files?.[0]; if (!file || loadingAudio) return;
   const generation = ++audioGeneration; loadingAudio = true; message('Decoding audio locally…');
@@ -119,7 +120,7 @@ byId<HTMLInputElement>('audio-file').onchange = async event => {
     if (generation !== audioGeneration) return;
     setAudio(file, { samples, sampleRate: decoded.sampleRate }, file.name); decisions = {}; byId('demo-note').hidden = true; refresh(); drawWave(); message('Audio decoded locally. Load its matching transcript or review the current one.');
   } catch (error) { if (generation === audioGeneration) message(`Could not decode audio: ${(error as Error).message}`, true); }
-  finally { if (context) await context.close(); loadingAudio = false; (event.target as HTMLInputElement).value = ''; }
+  finally { if (context) await context.close().catch(()=>{}); loadingAudio = false; (event.target as HTMLInputElement).value = ''; }
 };
 audio.addEventListener('timeupdate', () => { const duration = signal ? signal.samples.length / signal.sampleRate : 1; byId('playhead').style.left = `${Math.min(100, audio.currentTime / duration * 100)}%`; if (stopAt !== null && audio.currentTime >= stopAt) { audio.pause(); stopAt = null; } });
 byId('export-srt').onclick = () => { if (!cues.length) return; download('ghostwords-reviewed.srt', exportSrt(cues, decisions), 'application/x-subrip'); message('SRT exported. Pending cues are included; removed cues are excluded.'); };
