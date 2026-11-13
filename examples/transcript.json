@@ -1,0 +1,6 @@
+{
+  "cues": [
+    { "start": 0.4, "end": 2.7, "text": "Calibration segment one." },
+    { "start": 3.2, "end": 5.0, "text": "Thank you for watching. Please subscribe." }
+  ]
+}

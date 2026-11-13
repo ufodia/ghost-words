@@ -1,0 +1,19 @@
+1
+00:00:00,400 --> 00:00:02,700
+Calibration segment one.
+
+2
+00:00:03,200 --> 00:00:05,000
+Thank you for watching. Please subscribe.
+
+3
+00:00:05,600 --> 00:00:07,600
+Please continue. Please continue. Please continue.
+
+4
+00:00:08,300 --> 00:00:10,400
+Calibration segment four.
+
+5
+00:00:12,500 --> 00:00:14,000
+This line extends beyond the recording.
