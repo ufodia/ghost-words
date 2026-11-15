@@ -97,7 +97,7 @@ function retainFocus(): () => void {
       const replacement = focusRoot.querySelectorAll<HTMLElement>(target.selector)[target.index];
       if (!replacement || replacement.matches(':disabled') || !replacement.getClientRects().length) { deferredFocus = target; return; }
       deferredFocus = null;
-      replacement.focus({ preventScroll: true });
+      replacement.focus({ preventScroll: !tabbing });
       if (!tabbing && start !== null && end !== null && (replacement instanceof HTMLInputElement || replacement instanceof HTMLTextAreaElement)) replacement.setSelectionRange(start, end);
     };
     if (tabbing) setTimeout(restore, 0); else restore();
