@@ -96,6 +96,8 @@ If GhostWords saves you a re-listen, you can help Ufodia maintain file compatibi
 
 <a href="https://buymeacoffee.com/ufodia"><img src="docs/assets/coffee-button.svg" alt="Buy me a coffee — support Ufodia" width="230"></a>
 
+You can also [sponsor ufodia on GitHub](https://github.com/sponsors/ufodia).
+
 ## License
 
 [MIT](LICENSE) © 2026 **Ufodia**. The source, original artwork, synthetic demo, and supplied examples are covered by this repository's license. Dependency licenses remain with their respective authors.
