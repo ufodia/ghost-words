@@ -8,8 +8,8 @@ app.innerHTML = `
   <section class="workspace" aria-label="Transcript review workspace"><div class="workspace-bar"><div><span class="status-dot"></span><strong id="session-name">Synthetic demo session</strong><span class="muted" id="session-meta"></span></div><button class="text-button" id="demo">Load demo</button><button class="text-button" id="clear">Clear desk</button></div>
   <div class="import-bar"><label class="file-button">↥ Load audio<input id="audio-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac"></label><label class="file-button">↥ Load transcript<input id="transcript-file" type="file" accept=".srt,.vtt,.json"></label><span id="file-info">WAV, MP3 and browser-supported audio · SRT, VTT or JSON</span><span class="privacy-pill">LOCAL ONLY</span></div>
   <div class="signal-panel"><div class="signal-label"><span>AUDIO SIGNAL</span><span id="audio-duration">12.00 seconds</span></div><div class="wave-wrap"><canvas id="waveform" aria-label="Audio waveform. Use the transcript rows or audio player for playback."></canvas><div id="playhead" aria-hidden="true"></div></div><div class="time-scale" aria-hidden="true"><span>00:00</span><span id="mid-time">00:06</span><span id="end-time">00:12</span></div><audio id="audio" controls preload="metadata" aria-label="Recording playback"></audio><p class="demo-note" id="demo-note">Demo audio contains synthetic calibration tones and silence, not speech. Transcript errors are deliberately planted.</p></div>
-  <div class="review-grid"><section class="transcript-panel"><div class="section-bar"><div><p class="eyebrow">01 / INSPECT</p><h2>Transcript</h2></div><span class="counter" id="cue-count">5 segments</span></div><div id="cue-list"></div></section><aside class="evidence-panel"><div class="section-bar"><div><p class="eyebrow">02 / VERIFY</p><h2>Evidence queue</h2></div><span class="counter warm" id="finding-count"></span></div><div class="threshold"><label for="threshold">Quiet-audio threshold <output id="threshold-value">−42 dBFS</output></label><input id="threshold" type="range" min="-80" max="-15" value="-42" step="1"><p>Lower values flag only quieter audio. Flags invite review; they do not prove an error.</p></div><div id="evidence-list"></div><div class="boundary"><span>◎</span><p>Energy is not speech recognition. Quiet speech and legitimate repetition can be flagged.</p></div></aside></div>
-  <div class="export-bar"><div><p class="eyebrow">03 / TAKE IT WITH YOU</p><strong id="review-status">Start with a flagged segment</strong><p>Unreviewed lines remain in the export. Only lines you remove are excluded.</p></div><div class="export-actions"><button id="export-report" class="secondary">Export evidence JSON</button><button id="export-srt" class="primary">Export reviewed SRT <span>↗</span></button></div></div></section>
+  <div class="review-grid"><section class="transcript-panel"><div class="section-bar"><div><p class="eyebrow">01 / INSPECT</p><h2>Transcript</h2></div><span class="counter" id="cue-count">5 segments</span></div><div id="cue-list"></div></section><aside class="evidence-panel"><div class="section-bar"><div><p class="eyebrow">02 / VERIFY</p><h2>Evidence queue</h2></div><span class="counter warm" id="finding-count"></span></div><div class="threshold"><label for="threshold">Quiet-audio threshold <output id="threshold-value">−42 dBFS</output></label><input id="threshold" type="range" min="-80" max="-15" value="-42" step="1"><p>Lower values flag only quieter audio. Flags invite review; they do not prove an error.</p></div><div id="evidence-list"></div><div class="boundary"><span aria-hidden="true">◎</span><p>Energy is not speech recognition. Quiet speech and legitimate repetition can be flagged.</p></div></aside></div>
+  <div class="export-bar"><div><p class="eyebrow">03 / TAKE IT WITH YOU</p><strong id="review-status" role="status">Start with a flagged segment</strong><p>Unreviewed lines remain in the export. Only lines you remove are excluded.</p></div><div class="export-actions"><button id="export-report" class="secondary">Export evidence JSON</button><button id="export-srt" class="primary">Export reviewed SRT <span>↗</span></button></div></div></section>
   <p class="status-message" id="message" role="status" aria-live="polite"></p><footer><p>A little less guesswork. A little more listening.</p><span>Open source · MIT © 2026 Ufodia</span><a href="https://github.com/ufodia/ghost-words/blob/main/docs/user-guide.md" target="_blank" rel="noreferrer">Read the field guide ↗</a></footer></main>`;
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -52,7 +52,60 @@ function select(cue: Cue, play = true) {
     if (play) audio.play().catch(() => message('Playback needs a browser interaction. Use the audio player.', true));
   } else message('This segment is outside the loaded recording.', true);
 }
+type FocusTarget = { selector: string; index: number };
+const focusRoot = app;
+const focusAttributes = ['data-action', 'data-id', 'data-mode', 'data-field', 'data-part-field', 'data-cue-field', 'data-lesson-field'];
+function focusTarget(element: Element | null): FocusTarget | null {
+  if (!element || !focusRoot.contains(element)) return null;
+  let selector: string;
+  if (element.id) selector = `#${CSS.escape(element.id)}`;
+  else {
+    const part = element.closest('[data-part-id]');
+    if (part && element.hasAttribute('data-part-field')) selector = `[data-part-id="${CSS.escape(part.getAttribute('data-part-id')!)}"] [data-part-field="${CSS.escape(element.getAttribute('data-part-field')!)}"]`;
+    else if (element.matches('a[href]')) selector = `a[href="${CSS.escape(element.getAttribute('href')!)}"]`;
+    else {
+      const keys = focusAttributes.filter(key => element.hasAttribute(key));
+      selector = element.tagName.toLowerCase() + keys.map(key => `[${key}="${CSS.escape(element.getAttribute(key)!)}"]`).join('');
+      if (!keys.length && element.hasAttribute('aria-label')) selector += `[aria-label="${CSS.escape(element.getAttribute('aria-label')!)}"]`;
+    }
+  }
+  return { selector, index: [...focusRoot.querySelectorAll(selector)].indexOf(element) };
+}
+let tabIntent = false;
+let tabDestination: FocusTarget | null = null;
+let deferredFocus: FocusTarget | null = null;
+focusRoot.addEventListener('keydown', event => {
+  if (event.key !== 'Tab') return;
+  const scope = (event.target as Element).closest('dialog[open]') ?? focusRoot;
+  const controls = [...scope.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled):not([type="hidden"]),select:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]')].filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0);
+  const index = controls.indexOf(document.activeElement as HTMLElement);
+  if (index < 0) return;
+  tabIntent = true;
+  tabDestination = focusTarget(controls[index + (event.shiftKey ? -1 : 1)] ?? null);
+  setTimeout(() => { tabIntent = false; tabDestination = null; }, 0);
+});
+function retainFocus(): () => void {
+  const active = document.activeElement;
+  const target = tabIntent ? tabDestination : focusTarget(active) ?? (active === document.body ? deferredFocus : null);
+  const tabbing = tabIntent;
+  const editable = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+  const start = editable ? active.selectionStart : null;
+  const end = editable ? active.selectionEnd : null;
+  return () => {
+    if (!target) { if (tabbing) deferredFocus = null; return; }
+    const restore = () => {
+      const replacement = focusRoot.querySelectorAll<HTMLElement>(target.selector)[target.index];
+      if (!replacement || replacement.matches(':disabled') || !replacement.getClientRects().length) { deferredFocus = target; return; }
+      deferredFocus = null;
+      replacement.focus({ preventScroll: true });
+      if (!tabbing && start !== null && end !== null && (replacement instanceof HTMLInputElement || replacement instanceof HTMLTextAreaElement)) replacement.setSelectionRange(start, end);
+    };
+    if (tabbing) setTimeout(restore, 0); else restore();
+  };
+}
+
 function renderCues() {
+  const restoreFocus = retainFocus();
   const list = byId('cue-list'); list.replaceChildren();
   byId('cue-count').textContent = `${cues.length} segments`;
   byId('session-meta').textContent = signal ? ' / AUDIO ATTACHED' : ' / TRANSCRIPT ONLY';
@@ -60,35 +113,38 @@ function renderCues() {
   for (const cue of cues) {
     const row = document.createElement('article'); row.className = `cue-row ${selected === cue.id ? 'selected' : ''} ${decisions[cue.id] === 'remove' ? 'removed' : ''}`;
     const meta = document.createElement('div'); meta.className = 'cue-meta';
-    const play = document.createElement('button'); play.className = 'play-cue'; play.textContent = '▶'; play.setAttribute('aria-label', `Play segment at ${formatTime(cue.start, '.')}`); play.onclick = () => select(cue);
+    const play = document.createElement('button'); play.className = 'play-cue'; play.id = `play-${cue.id}`; play.textContent = 'Play'; play.setAttribute('aria-label', `Play segment at ${formatTime(cue.start, '.')}`); play.onclick = () => select(cue);
     const time = document.createElement('span'); time.textContent = `${formatTime(cue.start, '.').slice(3)} — ${formatTime(cue.end, '.').slice(3)}`;
     const cueFindings = findings.filter(f => f.cueId === cue.id);
     const badge = document.createElement('span'); badge.className = `cue-badge ${cueFindings.length ? 'flagged' : ''}`; badge.textContent = decisions[cue.id] === 'remove' ? 'REMOVED' : decisions[cue.id] === 'keep' ? 'REVIEWED' : cueFindings.length ? 'CHECK THIS' : 'NO SIGNAL FLAG';
     meta.append(play, time, badge); row.append(meta);
-    const text = document.createElement('textarea'); text.value = cue.text; text.maxLength = 20000; text.rows = cue.text.length > 85 ? 3 : 2; text.setAttribute('aria-label', `Edit segment ${cue.id.replace('cue-', '')}`);
+    const text = document.createElement('textarea'); text.id = `text-${cue.id}`; text.value = cue.text; text.maxLength = 20000; text.rows = cue.text.length > 85 ? 3 : 2; text.setAttribute('aria-label', `Edit segment ${cue.id.replace('cue-', '')}`);
     text.onchange = () => { if (!text.value.trim()) { message('Use Remove line to exclude an empty segment.', true); text.value = cue.text; return; } cue.text = text.value.trim(); decisions[cue.id] = 'pending'; refresh(); message('Text updated. Review flags have been recalculated.'); };
     row.append(text);
     const actions = document.createElement('div'); actions.className = 'cue-actions';
     for (const [label, decision] of [['Keep line', 'keep'], ['Remove line', 'remove'], ['Reset review', 'pending']] as const) {
-      const b = document.createElement('button'); b.textContent = label; b.className = decisions[cue.id] === decision ? 'active' : ''; b.onclick = () => { decisions[cue.id] = decision; renderCues(); renderEvidence(); updateProgress(); }; actions.append(b);
+      const b = document.createElement('button'); b.id = `${decision}-${cue.id}`; b.textContent = label; if (decision !== 'pending') b.setAttribute('aria-pressed', String(decisions[cue.id] === decision)); b.className = decisions[cue.id] === decision ? 'active' : ''; b.onclick = () => { decisions[cue.id] = decision; renderCues(); renderEvidence(); updateProgress(); }; actions.append(b);
     }
     row.append(actions); list.append(row);
   }
+  restoreFocus();
 }
 function renderEvidence() {
+  const restoreFocus = retainFocus();
   const list = byId('evidence-list'); list.replaceChildren();
   byId('finding-count').textContent = `${findings.length} flags`;
   if (!signal) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = 'Load audio to inspect quiet segments. Repetition and timing checks still run on your transcript.'; list.append(p); }
   if (!findings.length) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = cues.length ? 'No configured signal flags. This does not certify the transcript.' : 'Your evidence queue will appear here.'; list.append(p); }
   findings.forEach((finding, index) => {
     const cue = cues.find(c => c.id === finding.cueId)!;
-    const card = document.createElement('button'); card.className = `finding ${selected === cue.id ? 'selected' : ''}`;
+    const card = document.createElement('button'); card.id = `finding-${finding.cueId}-${finding.kind}`; card.className = `finding ${selected === cue.id ? 'selected' : ''}`;
     const top = document.createElement('span'); top.className = 'finding-meta'; top.textContent = `${String(index + 1).padStart(2, '0')} / ${finding.kind.toUpperCase()} · ${formatTime(cue.start, '.').slice(3)}`;
     const title = document.createElement('strong'); title.textContent = finding.label;
     const detail = document.createElement('span'); detail.className = 'finding-detail'; detail.textContent = finding.detail;
     const state = document.createElement('span'); state.className = 'finding-state'; state.textContent = decisions[cue.id] === 'keep' ? '✓ Reviewed · kept' : decisions[cue.id] === 'remove' ? '− Reviewed · removed' : 'Listen to segment →';
     card.append(top, title, detail, state); card.onclick = () => select(cue); list.append(card);
   });
+  restoreFocus();
 }
 function updateProgress() { const reviewed = cues.filter(c => decisions[c.id] && decisions[c.id] !== 'pending').length; const removed = cues.filter(c => decisions[c.id] === 'remove').length; byId('review-status').textContent = `${reviewed} of ${cues.length} segments reviewed · ${removed} removed`; byId<HTMLButtonElement>('export-srt').disabled = !cues.length; byId<HTMLButtonElement>('export-report').disabled = !cues.length; }
 function drawWave() {
