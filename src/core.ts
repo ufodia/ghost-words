@@ -97,7 +97,7 @@ export function analyze(cues: Cue[], signal: AudioSignal | null, threshold = -42
       const db = signalDb(signal, cue.start, cue.end);
       if (db < threshold) findings.push({ cueId: cue.id, kind: 'silence', label: 'Text over quiet audio', detail: `Average energy ${db.toFixed(1)} dBFS is below your ${threshold} dBFS threshold. Quiet speech can also trigger this flag.`, level: 'high', db });
     }
-    if (repeatedPhrase(cue.text) || (index > 0 && normalized(cue.text).split(' ').length >= 3 && normalized(cue.text) === normalized(cues[index - 1].text))) findings.push({ cueId: cue.id, kind: 'repetition', label: 'Possible repetition loop', detail: 'A phrase repeats three times, or this cue repeats the previous cue. Listen before changing it.', level: 'review' });
+    if (repeatedPhrase(cue.text) || (normalized(cue.text).split(' ').length >= 3 && cues.slice(Math.max(0, index - 10), index).some(previous => normalized(cue.text) === normalized(previous.text)))) findings.push({ cueId: cue.id, kind: 'repetition', label: 'Possible repetition loop', detail: 'A phrase repeats three times, or this cue repeats one of the previous ten cues. Listen before changing it; refrains and repeated speakers can be intentional.', level: 'review' });
   });
   return findings;
 }

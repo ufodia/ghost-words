@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { analyze, demoCues, demoSignal, exportSrt, formatTime, parseTranscript, repeatedPhrase, signalDb, timestamp, validateCues, wavBytes } from './core';
 
+it('flags non-adjacent repetition for review without flagging short ordinary replies', () => {
+  const cues = validateCues([
+    { start: 0, end: 1, text: 'Thank you for watching.' },
+    { start: 1, end: 2, text: 'Another spoken sentence.' },
+    { start: 2, end: 3, text: 'Thank you for watching.' },
+    { start: 3, end: 4, text: 'Yes.' },
+    { start: 4, end: 5, text: 'Yes.' },
+  ]);
+  expect(analyze(cues, null).filter(f => f.kind === 'repetition').map(f => f.cueId)).toEqual([cues[2].id]);
+});
+
 describe('timestamped transcript formats', () => {
   it('parses SRT with BOM, CRLF and multiline text', () => {
     const cues = parseTranscript('\uFEFF1\r\n00:00:01,250 --> 00:00:02,500\r\nHello\r\nworld.\r\n');
